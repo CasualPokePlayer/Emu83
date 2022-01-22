@@ -181,9 +181,9 @@ EXPORT u64 TI83_GetCycleCount(TI83_t* TI83) {
 
 EXPORT void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCallback_t callback) {
 	switch (id) {
-		case MEMORY_CB_READ: TI83->ReadCallback = callback; break;
-		case MEMORY_CB_WRITE: TI83->WriteCallback = callback; break;
-		case MEMORY_CB_EXECUTE: TI83->ExecuteCallback = callback; break;
+		case MEM_CB_READ: TI83->ReadCallback = callback; break;
+		case MEM_CB_WRITE: TI83->WriteCallback = callback; break;
+		case MEM_CB_EXECUTE: TI83->ExecuteCallback = callback; break;
 	}
 }
 

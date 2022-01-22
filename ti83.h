@@ -101,9 +101,9 @@ typedef struct {
 typedef Stream_t Queue_t;
 
 typedef enum {
-	MEMORY_CB_READ,
-	MEMORY_CB_WRITE,
-	MEMORY_CB_EXECUTE,
+	MEM_CB_READ,
+	MEM_CB_WRITE,
+	MEM_CB_EXECUTE,
 } MemoryCallbackId_t;
 
 typedef void (*MemoryCallback_t)(u16 addr, u64 cycleCount);
