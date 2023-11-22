@@ -27,27 +27,30 @@ SOFTWARE.
 #include "events.h"
 
 #define FETCH(DEST, ADDR) do { \
-	if (__builtin_expect(!!TI83->ExecuteCallback, false)) { \
-		TI83->ExecuteCallback(ADDR, cycleCount); \
+	u16 address = ADDR; \
+	if (UNLIKELY(TI83->ExecuteCallback)) { \
+		TI83->ExecuteCallback(address, cycleCount); \
 	} \
 	REGS(R) = (REGS(R) & 0x80) | ((REGS(R) + 1) & 0x7F); \
-	DEST = ReadMem(TI83, ADDR); \
+	DEST = ReadMem(TI83, address); \
 	cycleCount += 4; \
 } while (0)
 
 #define READ(DEST, ADDR) do { \
-	if (__builtin_expect(!!TI83->ReadCallback, false)) { \
-		TI83->ReadCallback(ADDR, cycleCount); \
+	u16 address = ADDR; \
+	if (UNLIKELY(TI83->ReadCallback)) { \
+		TI83->ReadCallback(address, cycleCount); \
 	} \
-	DEST = ReadMem(TI83, ADDR); \
+	DEST = ReadMem(TI83, address); \
 	cycleCount += 3; \
 } while (0)
 
 #define WRITE(ADDR, VAL) do { \
-	if (__builtin_expect(!!TI83->WriteCallback, false)) { \
-		TI83->WriteCallback(ADDR, cycleCount); \
+	u16 address = ADDR; \
+	if (UNLIKELY(TI83->WriteCallback)) { \
+		TI83->WriteCallback(address, cycleCount); \
 	} \
-	WriteMem(TI83, ADDR, VAL); \
+	WriteMem(TI83, address, VAL); \
 	cycleCount += 3; \
 } while (0)
 
@@ -111,21 +114,49 @@ SOFTWARE.
 #define ZF_BIT BIT(6)
 #define SF_BIT BIT(7)
 
-#define MSB(N) BIT(sizeof (typeof(N)) * 8 - 1)
+#define MSB(N) BIT(sizeof (N) * 8 - 1)
 
-#define CHECK_ADD_OVERFLOW(N1, N2, T) __builtin_add_overflow_p((T)N1, (T)N2, (T)0)
-#define CHECK_SUB_OVERFLOW(N1, N2, T) __builtin_sub_overflow_p((T)N1, (T)N2, (T)0)
+#define SIGNED(N, T) (T)(((s32)N ^ MSB(N)) - MSB(N))
 
-#define CHECK_ADC_OVERFLOW(N1, N2, C, T) __builtin_add_overflow_p(((T)N1 + C), (T)N2, (T)0)
-#define CHECK_SBC_OVERFLOW(N1, N2, C, T) __builtin_sub_overflow_p(((T)N1 - C), (T)N2, (T)0)
+#define CF_CHECK_ADD(N1, N2, T) do { \
+	if ((T)(N1 + N2) < N1) { \
+		REGS(F) |= CF_BIT; \
+	} \
+} while (0)
 
-#define CF_CHECK_ADD(N1, N2) do { if (CHECK_ADD_OVERFLOW(N1, N2, typeof(N1))) REGS(F) |= CF_BIT; } while (0)
-#define CF_CHECK_SUB(N1, N2) do { if (CHECK_SUB_OVERFLOW(N1, N2, typeof(N1))) REGS(F) |= CF_BIT; } while (0)
+#define CF_CHECK_SUB(N1, N2, T) do { \
+	if ((T)(N1 - N2) > N1) { \
+		REGS(F) |= CF_BIT; \
+	} \
+} while (0)
 
-#define CF_CHECK_ADC(N1, N2, C) do { if (CHECK_ADC_OVERFLOW(N1, N2, C, typeof(N1))) REGS(F) |= CF_BIT; } while (0)
-#define CF_CHECK_SBC(N1, N2, C) do { if (CHECK_SBC_OVERFLOW(N1, N2, C, typeof(N1))) REGS(F) |= CF_BIT; } while (0)
+#define CF_CHECK_ADC(N1, N2, C) do { \
+	if (((u32)N1 + (u32)N2 + C) & BIT(sizeof (N1) * 8)) { \
+		REGS(F) |= CF_BIT; \
+	} \
+} while (0)
+
+#define CF_CHECK_SBC(N1, N2, C) do { \
+	if (((u32)N1 - (u32)N2 - C) & BIT(sizeof (N1) * 8)) { \
+		REGS(F) |= CF_BIT; \
+	} \
+} while (0)
 
 #define PF_CHECK(N) do { if (ParityLUT[N]) REGS(F) |= PF_BIT; } while (0)
+
+#if defined(__GNUC__) && __GNUC__ >= 7 && !defined(__clang__)
+	#define CHECK_ADD_OVERFLOW(N1, N2, T) __builtin_add_overflow_p(SIGNED(N1, T), SIGNED(N2, T), (T)0)
+	#define CHECK_SUB_OVERFLOW(N1, N2, T) __builtin_sub_overflow_p(SIGNED(N1, T), SIGNED(N2, T), (T)0)
+
+	#define CHECK_ADC_OVERFLOW(N1, N2, C, T) __builtin_add_overflow_p((s32)SIGNED(N1, T) + C, SIGNED(N2, T), (T)0)
+	#define CHECK_SBC_OVERFLOW(N1, N2, C, T) __builtin_sub_overflow_p((s32)SIGNED(N1, T) - C, SIGNED(N2, T), (T)0)
+#else
+	#define CHECK_ADD_OVERFLOW(N1, N2, T) ((s32)SIGNED(N1, T) + (s32)SIGNED(N2, T) + (s32)MSB(T)) & BIT(sizeof (T) * 8)
+	#define CHECK_SUB_OVERFLOW(N1, N2, T) ((s32)SIGNED(N1, T) - (s32)SIGNED(N2, T) + (s32)MSB(T)) & BIT(sizeof (T) * 8)
+
+	#define CHECK_ADC_OVERFLOW(N1, N2, C, T) ((s32)SIGNED(N1, T) + (s32)SIGNED(N2, T) + C + (s32)MSB(T)) & BIT(sizeof (T) * 8)
+	#define CHECK_SBC_OVERFLOW(N1, N2, C, T) ((s32)SIGNED(N1, T) - (s32)SIGNED(N2, T) - C + (s32)MSB(T)) & BIT(sizeof (T) * 8)
+#endif
 
 #define VF_CHECK_ADD(N1, N2, T) do { if (CHECK_ADD_OVERFLOW(N1, N2, T)) REGS(F) |= VF_BIT; } while (0)
 #define VF_CHECK_SUB(N1, N2, T) do { if (CHECK_SUB_OVERFLOW(N1, N2, T)) REGS(F) |= VF_BIT; } while (0)
@@ -133,7 +164,7 @@ SOFTWARE.
 #define VF_CHECK_ADC(N1, N2, C, T) do { if (CHECK_ADC_OVERFLOW(N1, N2, C, T)) REGS(F) |= VF_BIT; } while (0)
 #define VF_CHECK_SBC(N1, N2, C, T) do { if (CHECK_SBC_OVERFLOW(N1, N2, C, T)) REGS(F) |= VF_BIT; } while (0)
 
-#define XF_CHECK(N) do { REGS(F) |= (N >> ((sizeof (typeof(N)) - 1) * 8)) & XF_BIT; } while (0)
+#define XF_CHECK(N) do { REGS(F) |= (N >> ((sizeof (N) - 1) * 8)) & XF_BIT; } while (0)
 
 #define HF_CHECK_ADD(N1, N2) do { \
 	u16 mask = (MSB(N1) >> 3) - 1; \
@@ -163,7 +194,7 @@ SOFTWARE.
 	} \
 } while (0)
 
-#define YF_CHECK(N) do { REGS(F) |= (N >> ((sizeof (typeof(N)) - 1) * 8)) & YF_BIT; } while (0)
+#define YF_CHECK(N) do { REGS(F) |= (N >> ((sizeof (N) - 1) * 8)) & YF_BIT; } while (0)
 
 #define ZF_CHECK(N) do { if (!N) REGS(F) |= ZF_BIT; } while (0)
 
@@ -203,10 +234,10 @@ while (0)
 } while (0)
 
 #define LD_DRR_E_N(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 2; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 val; \
 	READ(val, REGS(PC)++); \
 	WRITE(REGS(WZ), val); \
@@ -217,10 +248,10 @@ while (0)
 #define LD_DHL_R(R) do { WRITE(REGS(HL), REGS(R)); } while (0)
 
 #define LD_DRR_E_R(RR, R) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	WRITE(REGS(WZ), REGS(R)); \
 } while (0)
 
@@ -229,10 +260,10 @@ while (0)
 #define LD_R_DHL(R) do { READ(REGS(R), REGS(HL)); } while (0)
 
 #define LD_R_DRR_E(R, RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	READ(REGS(R), REGS(WZ)); \
 } while (0)
 
@@ -240,25 +271,25 @@ while (0)
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	WRITE(addr.All++, REGS(R2)); \
-	WRITE(addr.All, REGS(R1)); \
-	REGS(WZ) = addr.All; \
+	WRITE(addr.Full++, REGS(R2)); \
+	WRITE(addr.Full, REGS(R1)); \
+	REGS(WZ) = addr.Full; \
 } while (0)
 
 #define LD_RR_DNN(R1, R2) do { \
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	READ(REGS(R2), addr.All++); \
-	READ(REGS(R1), addr.All); \
-	REGS(WZ) = addr.All; \
+	READ(REGS(R2), addr.Full++); \
+	READ(REGS(R1), addr.Full); \
+	REGS(WZ) = addr.Full; \
 } while (0)
 
 #define LD_DNN_A() do { \
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	WRITE(addr.All, REGS(A)); \
+	WRITE(addr.Full, REGS(A)); \
 	REGS(W) = REGS(A); \
 	REGS(Z) = addr.Low + 1; \
 } while (0)
@@ -267,8 +298,8 @@ while (0)
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	READ(REGS(A), addr.All); \
-	REGS(WZ) = addr.All + 1; \
+	READ(REGS(A), addr.Full); \
+	REGS(WZ) = addr.Full + 1; \
 } while (0)
 
 #define INC_RR(RR) do { \
@@ -302,10 +333,10 @@ while (0)
 } while (0)
 
 #define INC_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	++cycleCount; \
@@ -352,10 +383,10 @@ while (0)
 } while (0)
 
 #define DEC_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	++cycleCount; \
@@ -379,7 +410,7 @@ while (0)
 #define ADD_RR_RR(RR1, RR2) do { \
 	REGS(F) &= SF_BIT | ZF_BIT | PF_BIT; \
 	HF_CHECK_ADD(REGS(RR1), REGS(RR2)); \
-	CF_CHECK_ADD(REGS(RR1), REGS(RR2)); \
+	CF_CHECK_ADD(REGS(RR1), REGS(RR2), u16); \
 	REGS(WZ) = REGS(RR1) + 1; \
 	REGS(RR1) += REGS(RR2); \
 	YF_CHECK(REGS(RR1)); \
@@ -419,10 +450,10 @@ while (0)
 } while (0)
 
 #define JR_CC_E(CC) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	if (CC) { \
-		REGS(PC) += e; \
+		REGS(PC) += SIGNED(e, s8); \
 		REGS(WZ) = REGS(PC); \
 		cycleCount += 5; \
 	} \
@@ -520,7 +551,7 @@ while (0)
 	REGS(F) = 0; \
 	HF_CHECK_ADD(REGS(A), N); \
 	VF_CHECK_ADD(REGS(A), N, s8); \
-	CF_CHECK_ADD(REGS(A), N); \
+	CF_CHECK_ADD(REGS(A), N, u8); \
 	REGS(A) += N; \
 	SF_CHECK(REGS(A)); \
 	ZF_CHECK(REGS(A)); \
@@ -545,10 +576,10 @@ while (0)
 } while (0)
 
 #define ADD_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	ADD_A(drr); \
@@ -584,10 +615,10 @@ while (0)
 } while (0)
 
 #define ADC_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	ADC_A(drr); \
@@ -598,7 +629,7 @@ while (0)
 	REGS(F) |= NF_BIT; \
 	HF_CHECK_SUB(REGS(A), N); \
 	VF_CHECK_SUB(REGS(A), N, s8); \
-	CF_CHECK_SUB(REGS(A), N); \
+	CF_CHECK_SUB(REGS(A), N, u8); \
 	REGS(A) -= N; \
 	SF_CHECK(REGS(A)); \
 	ZF_CHECK(REGS(A)); \
@@ -623,10 +654,10 @@ while (0)
 } while (0)
 
 #define SUB_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	SUB_A(drr); \
@@ -663,10 +694,10 @@ while (0)
 } while (0)
 
 #define SBC_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	SBC_A(drr); \
@@ -700,10 +731,10 @@ while (0)
 } while (0)
 
 #define AND_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	AND_A(drr); \
@@ -736,10 +767,10 @@ while (0)
 } while (0)
 
 #define XOR_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	XOR_A(drr); \
@@ -772,10 +803,10 @@ while (0)
 } while (0)
 
 #define OR_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	OR_A(drr); \
@@ -786,7 +817,7 @@ while (0)
 	REGS(F) |= NF_BIT; \
 	HF_CHECK_SUB(REGS(A), N); \
 	VF_CHECK_SUB(REGS(A), N, s8); \
-	CF_CHECK_SUB(REGS(A), N); \
+	CF_CHECK_SUB(REGS(A), N, u8); \
 	u8 res = REGS(A) - N; \
 	SF_CHECK(res); \
 	ZF_CHECK(res); \
@@ -811,10 +842,10 @@ while (0)
 } while (0)
 
 #define CP_A_DRR_E(RR) do { \
-	s8 e; \
+	u8 e; \
 	READ(e, REGS(PC)++); \
 	cycleCount += 5; \
-	REGS(WZ) = REGS(RR) + e; \
+	REGS(WZ) = REGS(RR) + SIGNED(e, s8); \
 	u8 drr; \
 	READ(drr, REGS(WZ)); \
 	CP_A(drr); \
@@ -847,9 +878,9 @@ while (0)
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	REGS(WZ) = addr.All; \
+	REGS(WZ) = addr.Full; \
 	if (CC) { \
-		REGS(PC) = addr.All; \
+		REGS(PC) = addr.Full; \
 	} \
 } while (0)
 
@@ -857,10 +888,10 @@ while (0)
 	Addr_t addr; \
 	READ(addr.Low, REGS(PC)++); \
 	READ(addr.High, REGS(PC)++); \
-	REGS(WZ) = addr.All; \
+	REGS(WZ) = addr.Full; \
 	if (CC) { \
 		PUSH(PCH, PCL); \
-		REGS(PC) = addr.All; \
+		REGS(PC) = addr.Full; \
 	} \
 } while (0)
 
@@ -987,7 +1018,7 @@ while (0)
 	REGS(F) |= NF_BIT; \
 	HF_CHECK_SUB((u8)0, REGS(A)); \
 	VF_CHECK_SUB(0, REGS(A), s8); \
-	CF_CHECK_SUB((u8)0, REGS(A)); \
+	CF_CHECK_SUB(0, REGS(A), u8); \
 	REGS(A) = -REGS(A); \
 	SF_CHECK(REGS(A)); \
 	ZF_CHECK(REGS(A)); \
@@ -1744,7 +1775,7 @@ while (0)
 } while (0)
 
 typedef union {
-	u16 All;
+	u16 Full;
 	struct {
 		u8 Low;
 		u8 High;
@@ -2044,7 +2075,7 @@ void RunFrame(TI83_t* TI83) {
 				REGS(R) = (REGS(R) & 0x80) | ((REGS(R) + (inc >> 2)) & 0x7F);
 			}
 		} else while (cycleCount < TI83->NextEventTime) {
-			if (__builtin_expect(!!TI83->TraceCallback, false)) {
+			if (UNLIKELY(TI83->TraceCallback)) {
 				TI83->TraceCallback(cycleCount);
 			}
 			FETCH(opcode, REGS(PC)++);
@@ -3424,11 +3455,11 @@ void RunFrame(TI83_t* TI83) {
 						// 0xDDCB prefix
 						case 0xCB:
 						{
-							s8 e;
+							u8 e;
 							READ(e, REGS(PC)++);
 							READ(opcode, REGS(PC)++);
 							cycleCount += 2;
-							REGS(WZ) = REGS(IX) + e;
+							REGS(WZ) = REGS(IX) + SIGNED(e, s8);
 							switch (opcode) {
 								// rlc (ix+e),b
 								case 0x00: RLC_DRR_E_R(B); break;
@@ -5049,11 +5080,11 @@ void RunFrame(TI83_t* TI83) {
 						// 0xFDCB prefix
 						case 0xCB:
 						{
-							s8 e;
+							u8 e;
 							READ(e, REGS(PC)++);
 							READ(opcode, REGS(PC)++);
 							cycleCount += 2;
-							REGS(WZ) = REGS(IY) + e;
+							REGS(WZ) = REGS(IY) + SIGNED(e, s8);
 							switch (opcode) {
 								// rlc (iy+e),b
 								case 0x00: RLC_DRR_E_R(B); break;

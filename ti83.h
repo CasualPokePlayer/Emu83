@@ -31,7 +31,21 @@ SOFTWARE.
 #include <stdlib.h>
 #include <stdio.h>
 
-#define typeof __typeof__
+#if defined(__GNUC__) || defined(__clang__)
+	#define LIKELY(x) __builtin_expect(!!(x), true)
+	#define UNLIKELY(x) __builtin_expect(!!(x), false)
+#else
+	#define LIKELY(x) (x)
+	#define UNLIKELY(x) (x)
+#endif
+
+#if defined(_MSC_VER)
+	#define UNREACHABLE() __assume(false)
+#elif defined(__GNUC__) || defined(__clang__)
+	#define UNREACHABLE() __builtin_unreachable()
+#else
+	_Noreturn static void UNREACHABLE(void) {}
+#endif
 
 #define EVENT_TIME_NOW 0
 #define EVENT_TIME_NEVER 0xFFFFFFFFFFFFFFFFull
@@ -192,23 +206,30 @@ typedef struct {
 	u64 CycleCount;
 } TI83_t;
 
+#if defined(_WIN32)
+	#define EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+	#define EXPORT __attribute__((visibility("default")))
+#else
+	#define EXPORT
+#endif
 
-TI83_t* TI83_CreateContext(u8* ROMData, u32 ROMSize);
-void TI83_DestroyContext(TI83_t* TI83);
-bool TI83_LoadLinkFile(TI83_t* TI83, u8* linkFile, u32 len);
-void TI83_SetLinkFilesAreLoaded(TI83_t* TI83);
-bool TI83_GetLinkActive(TI83_t* TI83);
-bool TI83_Advance(TI83_t* TI83, bool onPressed, bool sendNextLinkFile, u32* videoBuffer, u32 backgroundColor, u32 foreColor);
-u64 TI83_GetStateSize(void);
-bool TI83_SaveState(TI83_t* TI83, void* buf);
-bool TI83_LoadState(TI83_t* TI83, void* buf);
-void TI83_GetRegs(TI83_t* TI83, u32* buf);
-bool TI83_GetMemoryArea(TI83_t* TI83, MemoryArea_t which, void** ptr, u32* len);
-u8 TI83_ReadMemory(TI83_t* TI83, u16 addr);
-void TI83_WriteMemory(TI83_t* TI83, u16 addr, u8 val);
-u64 TI83_TotalCyclesExecuted(TI83_t* TI83);
-void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCallback_t callback);
-void TI83_SetTraceCallback(TI83_t* TI83, TraceCallback_t callback);
-void TI83_SetInputCallback(TI83_t* TI83, InputCallback_t callback);
+EXPORT TI83_t* TI83_CreateContext(u8* ROMData, u32 ROMSize);
+EXPORT void TI83_DestroyContext(TI83_t* TI83);
+EXPORT bool TI83_LoadLinkFile(TI83_t* TI83, u8* linkFile, u32 len);
+EXPORT void TI83_SetLinkFilesAreLoaded(TI83_t* TI83);
+EXPORT bool TI83_GetLinkActive(TI83_t* TI83);
+EXPORT bool TI83_Advance(TI83_t* TI83, bool onPressed, bool sendNextLinkFile, u32* videoBuffer, u32 backgroundColor, u32 foreColor);
+EXPORT u64 TI83_GetStateSize(void);
+EXPORT bool TI83_SaveState(TI83_t* TI83, void* buf);
+EXPORT bool TI83_LoadState(TI83_t* TI83, void* buf);
+EXPORT void TI83_GetRegs(TI83_t* TI83, u32* buf);
+EXPORT bool TI83_GetMemoryArea(TI83_t* TI83, MemoryArea_t which, void** ptr, u32* len);
+EXPORT u8 TI83_ReadMemory(TI83_t* TI83, u16 addr);
+EXPORT void TI83_WriteMemory(TI83_t* TI83, u16 addr, u8 val);
+EXPORT u64 TI83_GetCycleCount(TI83_t* TI83);
+EXPORT void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCallback_t callback);
+EXPORT void TI83_SetTraceCallback(TI83_t* TI83, TraceCallback_t callback);
+EXPORT void TI83_SetInputCallback(TI83_t* TI83, InputCallback_t callback);
 
 #endif

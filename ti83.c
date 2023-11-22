@@ -29,9 +29,7 @@ SOFTWARE.
 #include "link.h"
 #include "savestate.h"
 
-#define EXPORT __attribute__((visibility("default")))
-
-EXPORT TI83_t* TI83_CreateContext(u8* ROMData, u32 ROMSize) {
+TI83_t* TI83_CreateContext(u8* ROMData, u32 ROMSize) {
 	if (ROMSize > 0x40000) {
 		return NULL;
 	}
@@ -66,7 +64,7 @@ EXPORT TI83_t* TI83_CreateContext(u8* ROMData, u32 ROMSize) {
 	return TI83;
 }
 
-EXPORT void TI83_DestroyContext(TI83_t* TI83) {
+void TI83_DestroyContext(TI83_t* TI83) {
 	for (u32 i = 0; i < 256; i++) {
 		free(TI83->LinkFiles[i].Data);
 	}
@@ -74,7 +72,7 @@ EXPORT void TI83_DestroyContext(TI83_t* TI83) {
 	free(TI83);
 }
 
-EXPORT bool TI83_LoadLinkFile(TI83_t* TI83, u8* linkFile, u32 len) {
+bool TI83_LoadLinkFile(TI83_t* TI83, u8* linkFile, u32 len) {
 	if (TI83->LinkFilesAreLoaded || TI83->CurrentLinkFile == 0xFF) {
 		return false;
 	}
@@ -90,16 +88,16 @@ EXPORT bool TI83_LoadLinkFile(TI83_t* TI83, u8* linkFile, u32 len) {
 	return true;
 }
 
-EXPORT void TI83_SetLinkFilesAreLoaded(TI83_t* TI83) {
+void TI83_SetLinkFilesAreLoaded(TI83_t* TI83) {
 	TI83->LinkFilesAreLoaded = true;
 	TI83->CurrentLinkFile = 0;
 }
 
-EXPORT bool TI83_GetLinkActive(TI83_t* TI83) {
+bool TI83_GetLinkActive(TI83_t* TI83) {
 	return TI83->LinkStatus != LINK_INACTIVE;
 }
 
-EXPORT bool TI83_Advance(TI83_t* TI83, bool onPressed, bool sendNextLinkFile, u32* videoBuffer, u32 backgroundColor, u32 foreColor) {
+bool TI83_Advance(TI83_t* TI83, bool onPressed, bool sendNextLinkFile, u32* videoBuffer, u32 backgroundColor, u32 foreColor) {
 	TI83->Lagged = true;
 	TI83->OnPressed = onPressed;
 	if (onPressed && TI83->OnIntEn && !TI83->OnIntPending) {
@@ -121,19 +119,19 @@ EXPORT bool TI83_Advance(TI83_t* TI83, bool onPressed, bool sendNextLinkFile, u3
 	return TI83->Lagged;
 }
 
-EXPORT u64 TI83_GetStateSize(void) {
+u64 TI83_GetStateSize(void) {
 	return StateSize();
 }
 
-EXPORT bool TI83_SaveState(TI83_t* TI83, void* buf) {
+bool TI83_SaveState(TI83_t* TI83, void* buf) {
 	return SaveState(TI83, buf);
 }
 
-EXPORT bool TI83_LoadState(TI83_t* TI83, void* buf) {
+bool TI83_LoadState(TI83_t* TI83, void* buf) {
 	return LoadState(TI83, buf);
 }
 
-EXPORT void TI83_GetRegs(TI83_t* TI83, u32* buf) {
+void TI83_GetRegs(TI83_t* TI83, u32* buf) {
 	buf[0] = TI83->MainRegs.AF;
 	buf[1] = TI83->MainRegs.BC;
 	buf[2] = TI83->MainRegs.DE;
@@ -148,7 +146,7 @@ EXPORT void TI83_GetRegs(TI83_t* TI83, u32* buf) {
 	buf[11] = TI83->SP;
 }
 
-EXPORT bool TI83_GetMemoryArea(TI83_t* TI83, MemoryArea_t which, void** ptr, u32* len) {
+bool TI83_GetMemoryArea(TI83_t* TI83, MemoryArea_t which, void** ptr, u32* len) {
 	switch (which) {
 		case MEM_ROM:
 			if (ptr) *ptr = TI83->ROM;
@@ -167,19 +165,19 @@ EXPORT bool TI83_GetMemoryArea(TI83_t* TI83, MemoryArea_t which, void** ptr, u32
 	return false;
 }
 
-EXPORT u8 TI83_ReadMemory(TI83_t* TI83, u16 addr) {
+u8 TI83_ReadMemory(TI83_t* TI83, u16 addr) {
 	return ReadMem(TI83, addr);
 }
 
-EXPORT void TI83_WriteMemory(TI83_t* TI83, u16 addr, u8 val) {
+void TI83_WriteMemory(TI83_t* TI83, u16 addr, u8 val) {
 	WriteMem(TI83, addr, val);
 }
 
-EXPORT u64 TI83_GetCycleCount(TI83_t* TI83) {
+u64 TI83_GetCycleCount(TI83_t* TI83) {
 	return TI83->CycleCount;
 }
 
-EXPORT void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCallback_t callback) {
+void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCallback_t callback) {
 	switch (id) {
 		case MEM_CB_READ: TI83->ReadCallback = callback; break;
 		case MEM_CB_WRITE: TI83->WriteCallback = callback; break;
@@ -187,10 +185,10 @@ EXPORT void TI83_SetMemoryCallback(TI83_t* TI83, MemoryCallbackId_t id, MemoryCa
 	}
 }
 
-EXPORT void TI83_SetTraceCallback(TI83_t* TI83, TraceCallback_t callback) {
+void TI83_SetTraceCallback(TI83_t* TI83, TraceCallback_t callback) {
 	TI83->TraceCallback = callback;
 }
 
-EXPORT void TI83_SetInputCallback(TI83_t* TI83, InputCallback_t callback) {
+void TI83_SetInputCallback(TI83_t* TI83, InputCallback_t callback) {
 	TI83->InputCallback = callback;
 }

@@ -22,30 +22,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <assert.h>
+
 #include "ti83.h"
 #include "crc32.h"
 #include "queue.h"
 
-#define PACKED __attribute__((packed))
+#pragma pack(push, 1)
 
 typedef struct {
 	u8 FileExists;
 	u32 Length;
 	u32 Index;
-} PACKED StreamState_t;
+} StreamState_t;
 
 typedef struct {
 	u8 Data[8]; // data sent by the calculator, or finalize file data
 	u32 Length;
 	u32 Index;
-} PACKED QueueState_t;
+} QueueState_t;
 
 typedef struct {
 	u16 AF;
 	u16 BC;
 	u16 DE;
 	u16 HL;
-} PACKED RegisterState_t;
+} RegisterState_t;
 
 typedef struct {
 	u32 ROMCRC;
@@ -98,7 +100,9 @@ typedef struct {
 	u64 NextEventTime;
 
 	u64 CycleCount;
-} PACKED TI83State_t;
+} TI83State_t;
+
+#pragma pack(pop)
 
 u64 StateSize(void) {
 	return sizeof (TI83State_t);
@@ -284,6 +288,7 @@ bool LoadState(TI83_t* TI83, void* buf) {
 	}
 	TI83->CurrentLinkFile = TI83State->CurrentLinkFile;
 	TI83->CurrentLinkData.Data = realloc(TI83->CurrentLinkData.Data, TI83State->CurrentLinkData.Length);
+	assert(TI83->CurrentLinkData.Data);
 	TI83->CurrentLinkData.Length = TI83State->CurrentLinkData.Length;
 	TI83->CurrentLinkData.Index = TI83State->CurrentLinkData.Index;
 	bool variableDataExists = TI83State->VariableData.FileExists;
@@ -298,7 +303,7 @@ bool LoadState(TI83_t* TI83, void* buf) {
 		data[1] = 0xC9;
 		u8* header = TI83->LinkFiles[TI83->CurrentLinkFile].Data + TI83->LinkFiles[TI83->CurrentLinkFile].Index - TI83->VariableData.Length - 13;
 		for (u32 i = 0; i < 13; i++) {
-			data[i+2] = header[i];
+			data[i + 2] = header[i];
 		}
 		u16 checksum = 0;
 		for (u32 i = 2; i < 13; i++) {
@@ -309,7 +314,13 @@ bool LoadState(TI83_t* TI83, void* buf) {
 		u32 len = TI83->CurrentLinkData.Index;
 		memcpy(TI83->CurrentLinkData.Data, data + sizeof (data) - len, len);
 	} else if (TI83State->LinkActionId == ACTION_RECEIVE_DATA_ACK) {
-		u8 data[4 + 2 + TI83->VariableData.Length + 2];
+		size_t dataSize = 4 + 2 + TI83->VariableData.Length + 2;
+#ifdef _MSC_VER
+		// TI83->VariableData.Length maxes out at 0xFFFF + 2
+		u8 data[4 + 2 + 0xFFFF + 2 + 2];
+#else
+		u8 data[dataSize];
+#endif
 		data[0] = 0x03;
 		data[1] = 0x56;
 		data[2] = 0x00;
@@ -324,7 +335,7 @@ bool LoadState(TI83_t* TI83, void* buf) {
 		data[4 + 2 + TI83->VariableData.Length] = checksum & 0xFF;
 		data[4 + 2 + TI83->VariableData.Length + 1] = checksum >> 8;
 		u32 len = TI83->CurrentLinkData.Index;
-		memcpy(TI83->CurrentLinkData.Data, data + sizeof (data) - len, len);
+		memcpy(TI83->CurrentLinkData.Data, data + dataSize - len, len);
 	}
 	TI83->LinkStatus = TI83State->LinkStatus;
 	TI83->CurrentLinkByte = TI83State->CurrentLinkByte;

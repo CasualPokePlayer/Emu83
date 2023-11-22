@@ -95,7 +95,7 @@ u64 Event(TI83_t* TI83, u64 cycleCount) {
 			ScheduleEvent(TI83, END_FRAME, EVENT_TIME_NEVER);
 			break;
 		}
-		case NUM_EVENTS: __builtin_unreachable();
+		case NUM_EVENTS: UNREACHABLE();
 	}
 
 	return cycleCount;

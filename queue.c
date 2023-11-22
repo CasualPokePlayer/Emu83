@@ -22,8 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <assert.h>
+
 #include "ti83.h"
-#include "assert.h"
 
 void Queue_Enqueue(Queue_t* queue, u8 val) {
 	assert(queue->Length);

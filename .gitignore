@@ -1,8 +1,1 @@
-.sconf_temp
-.sconsign.dblite
-config.log
-*.os
-*.o
-*.dll
-*.a
-*.so
+build/
